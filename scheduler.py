@@ -8,37 +8,45 @@ from firebase_store import save_report
 load_dotenv()
 
 RUNS_PER_DAY = int(os.getenv("RUNS_PER_DAY", 2))
-SPORT = os.getenv("SPORT", "FIFA_WC_2026")
 
-def run_pipeline():
+SPORTS = [
+    "FIFA_WC_2026",
+    "WT20W_WC_2026"
+]
+
+def run_pipeline(sport: str):
     print(f"\n{'='*50}")
-    print(f"🏃 Running sentiment pipeline — {SPORT}")
+    print(f"🏃 Running sentiment pipeline — {sport}")
     print(f"{'='*50}")
-    
-    report = run_sentiment_engine()
-    
+
+    report = run_sentiment_engine(sport)
+
     if report:
-        timestamp = save_report(report, SPORT)
+        timestamp = save_report(report, sport)
         print(f"✅ Pipeline complete! Saved as: {timestamp}")
     else:
-        print("❌ Pipeline failed — no report generated")
+        print(f"❌ Pipeline failed for {sport}")
+
+def run_all():
+    for sport in SPORTS:
+        run_pipeline(sport)
 
 if __name__ == "__main__":
-    # Calculate interval in hours
     interval_hours = 24 / RUNS_PER_DAY
     print(f"🕐 Scheduler starting — runs every {interval_hours}h ({RUNS_PER_DAY}x daily)")
-    
-    # Run once immediately on start
+    print(f"📋 Sports: {', '.join(SPORTS)}")
+
+    # Run once immediately
     print("▶️ Running immediately on startup...")
-    run_pipeline()
-    
-    # Then schedule
+    run_all()
+
+    # Schedule
     scheduler = BlockingScheduler()
-    scheduler.add_job(run_pipeline, 'interval', hours=interval_hours)
-    
+    scheduler.add_job(run_all, 'interval', hours=interval_hours)
+
     print(f"✅ Scheduler running — next run in {interval_hours} hours")
     print("Press Ctrl+C to stop")
-    
+
     try:
         scheduler.start()
     except KeyboardInterrupt:

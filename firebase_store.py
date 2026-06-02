@@ -31,13 +31,20 @@ def save_report(report: dict, sport: str = "FIFA_WC_2026"):
         "report": report
     }
     
-    db.collection("fifaSentiments").document(timestamp).set(doc_data)
-    print(f"✅ Report saved to Firebase: fifaSentiments/{timestamp}")
+    # Bug 1 fixed: indentation was wrong
+    collection_name = "fifaSentiments" if sport == "FIFA_WC_2026" else "wt20wSentiments"
+    db.collection(collection_name).document(timestamp).set(doc_data)
+    
+    # Bug 2 fixed: print message now shows correct collection name
+    print(f"✅ Report saved to Firebase: {collection_name}/{timestamp}")
     return timestamp
 
 def get_latest_report(sport: str = "FIFA_WC_2026"):
     db = init_firebase()
-    docs = db.collection("fifaSentiments")\
+    
+    # Bug 2 fixed: use correct collection based on sport
+    collection_name = "fifaSentiments" if sport == "FIFA_WC_2026" else "wt20wSentiments"
+    docs = db.collection(collection_name)\
               .order_by("generated_at", direction=firestore.Query.DESCENDING)\
               .limit(1)\
               .stream()
