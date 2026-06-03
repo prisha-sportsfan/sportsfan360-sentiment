@@ -31,6 +31,7 @@ Context: Football. Soccer. FIFA World Cup 2026. We are doing a sentiment analysi
 Audience: Football fans. India and global. Urban & semi-urban. Gen Z male. Gen Z female.
 Persona: Football fan. Tone is friendly, energetic and sports friendly.
 Constraints: Do not make up information that isn't on the internet. Do not repeat information from last report.
+Instructions: do not create WORD document.
 
 Return ONLY a valid JSON object with exactly this structure, no extra text:
 
