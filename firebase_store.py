@@ -19,6 +19,9 @@ def init_firebase():
     return firestore.client()
 
 def save_report(report: dict, sport: str = "FIFA_WC_2026"):
+    if not report:
+        print("⚠️ Failed to save report to Firebase: Report is empty or None.")
+        return None
     db = init_firebase()
     
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
