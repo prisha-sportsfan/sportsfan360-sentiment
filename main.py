@@ -23,16 +23,16 @@ def health():
     return {"status": "ok", "service": "SportsFan360 Sentiment Engine"}
 
 @app.post("/run-now")
-def run_now():
-    report = run_sentiment_engine()
+def run_now(sport: str = "FIFA_WC_2026"):
+    report = run_sentiment_engine(sport)
     if report:
-        timestamp = save_report(report, os.getenv("SPORT", "FIFA_WC_2026"))
-        return {"status": "success", "saved_as": timestamp}
+        timestamp = save_report(report, sport)
+        return {"status": "success", "saved_as": timestamp, "sport": sport}
     return {"status": "failed"}
 
 @app.get("/latest")
-def latest():
-    report = get_latest_report()
+def latest(sport: str = "FIFA_WC_2026"):
+    report = get_latest_report(sport)
     if report:
         return report
     return {"status": "no reports yet"}
@@ -41,8 +41,19 @@ def start_scheduler():
     runs_per_day = int(os.getenv("RUNS_PER_DAY", 2))
     interval_hours = 24 / runs_per_day
     scheduler = BlockingScheduler()
+    
+    def run_all_sports():
+        print("⏰ Starting scheduled background run for all sports...")
+        for sport in ["FIFA_WC_2026", "WT20W_WC_2026"]:
+            try:
+                report = run_sentiment_engine(sport)
+                if report:
+                    save_report(report, sport)
+            except Exception as e:
+                print(f"❌ Scheduled run error for {sport}: {e}")
+                
     scheduler.add_job(
-        lambda: save_report(run_sentiment_engine(), os.getenv("SPORT", "FIFA_WC_2026")),
+        run_all_sports,
         'interval',
         hours=interval_hours
     )
