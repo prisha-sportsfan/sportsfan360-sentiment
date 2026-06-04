@@ -66,17 +66,18 @@ Return ONLY a valid JSON object with exactly this structure. Start your response
 }
 
 Rules:
-- trending_ads: exactly 3 items
-- misfired_ads: exactly 2 items
-- trending_statements: exactly 5 items
-- top_searches: exactly 5 items
-- fan_emotions: exactly 5 items
-- footballer_emotions: exactly 5 items
-- national_emotions: exactly 5 items
-- trending_memes: exactly 3 items
-- top_signals: exactly 5 items
-- If real data not found for any item, say "Insufficient data for this period"
-- Only use real, direct, raw source URLs (e.g. YouTube, news websites) found via search — never return Google Cloud redirect links (like vertexaisearch.cloud.google.com)."""
+- trending_ads: exactly 3 items. If there is no active ad campaign, analyze major sponsors/brand campaigns related to the upcoming tournament or the sport generally.
+- misfired_ads: exactly 2 items. If no brand campaigns have misfired, use "Insufficient data for this period" only for the misfired ads section, or highlight brands facing pre-tournament public backlash.
+- trending_statements: exactly 5 items.
+- top_searches: exactly 5 items.
+- fan_emotions: exactly 5 items. Even in the pre-tournament phase, do NOT return "Insufficient data for this period". Instead, analyze fan emotions driven by ticket prices, squad announcements, tournament anticipation, or warm-up games.
+- footballer_emotions: exactly 5 items. Analyze emotions driven by squad call-ups, injury concerns, retirement announcements, or training camp vibes.
+- national_emotions: exactly 5 items. Analyze national moods based on qualification pathways, visa struggles, or local fan hype.
+- trending_memes: exactly 3 items. If no memes are active, identify viral social topics or trends.
+- top_signals: exactly 5 items.
+- If a specific URL/link is not found, use the official main domain/homepage where the campaign/news is reported (e.g., "https://www.fifa.com", "https://www.espncricinfo.com", "https://www.afaqs.com") or leave it as "" (empty string).
+- NEVER output placeholder links, dummy URLs (like ending in 12345), or Rickroll links (like "https://www.youtube.com/watch?v=dQw4w9WgXcQ").
+- Only use real, direct, raw source URLs found via search — never return Google Cloud redirect links (like vertexaisearch.cloud.google.com)."""
 
 # ── WT20W prompt ───────────────────────────────────────────
 
@@ -131,12 +132,15 @@ Return ONLY a valid JSON object with exactly this structure. Start your response
 }
 
 Rules:
-- trending_ads: exactly 3 items — REAL brand ads only, NOT cricket boards or websites
-- misfired_ads: exactly 2 items — REAL brand ads that backfired, NOT player performances
-- trending_statements: exactly 5 items — women cricketers ONLY
-- player_emotions: exactly 5 items — WOMEN cricketers ONLY, no men's players
-- If real data not found, say "Insufficient data for this period" — NEVER invent
-- Only use real, direct, raw source URLs (e.g. YouTube, news websites) found via search — never return Google Cloud redirect links (like vertexaisearch.cloud.google.com)."""
+- trending_ads: exactly 3 items. If there is no active ad campaign, analyze major sponsors/brand campaigns related to the upcoming tournament or women's cricket generally.
+- misfired_ads: exactly 2 items. If no brand campaigns have misfired, use "Insufficient data for this period" only for the misfired ads section, or highlight brands facing pre-tournament public backlash.
+- trending_statements: exactly 5 items — women cricketers ONLY.
+- player_emotions: exactly 5 items — WOMEN cricketers ONLY, no men's players. Even in the pre-tournament phase, do NOT return "Insufficient data for this period". Instead, analyze cricketer emotions driven by squad selections, training camps, upcoming warm-up preparations, or retirement announcements.
+- fan_emotions: exactly 5 items. Analyze fan emotions driven by tournament excitement, ticketing, or team preparations.
+- national_emotions: exactly 5 items. Analyze national moods based on qualification, warm-ups, or support build-up.
+- If a specific URL/link is not found, use the official main domain/homepage where the campaign/news is reported (e.g., "https://www.icc-cricket.com", "https://www.espncricinfo.com", "https://www.afaqs.com") or leave it as "" (empty string).
+- NEVER output placeholder links, dummy URLs (like ending in 12345), or Rickroll links (like "https://www.youtube.com/watch?v=dQw4w9WgXcQ").
+- Only use real, direct, raw source URLs found via search — never return Google Cloud redirect links (like vertexaisearch.cloud.google.com)."""
 
 
 def run_sentiment_engine(sport: str = "FIFA_WC_2026") -> dict:
