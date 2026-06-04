@@ -2,6 +2,8 @@
 
 AI-powered fan sentiment automation for FIFA World Cup 2026 and WT20 Women's World Cup.
 
+**Deployed Service URL:** [https://sportsfan360-sentiment.onrender.com](https://sportsfan360-sentiment.onrender.com)
+
 ---
 
 ## What It Does
