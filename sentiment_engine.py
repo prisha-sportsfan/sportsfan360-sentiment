@@ -153,7 +153,9 @@ def run_sentiment_engine(sport: str = "FIFA_WC_2026") -> dict:
             contents=task,
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt,
-                tools=[types.Tool(google_search=types.GoogleSearch())]
+                tools=[types.Tool(google_search=types.GoogleSearch())],
+                response_mime_type="application/json",
+                temperature=0.1
             )
         )
 
