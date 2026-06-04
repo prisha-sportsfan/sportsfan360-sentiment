@@ -76,7 +76,7 @@ Rules:
 - trending_memes: exactly 3 items
 - top_signals: exactly 5 items
 - If real data not found for any item, say "Insufficient data for this period"
-- Only use real URLs found via search — never make up links"""
+- Only use real, direct, raw source URLs (e.g. YouTube, news websites) found via search — never return Google Cloud redirect links (like vertexaisearch.cloud.google.com)."""
 
 # ── WT20W prompt ───────────────────────────────────────────
 
@@ -136,7 +136,7 @@ Rules:
 - trending_statements: exactly 5 items — women cricketers ONLY
 - player_emotions: exactly 5 items — WOMEN cricketers ONLY, no men's players
 - If real data not found, say "Insufficient data for this period" — NEVER invent
-- Only use real URLs — never make up links"""
+- Only use real, direct, raw source URLs (e.g. YouTube, news websites) found via search — never return Google Cloud redirect links (like vertexaisearch.cloud.google.com)."""
 
 
 def run_sentiment_engine(sport: str = "FIFA_WC_2026") -> dict:
