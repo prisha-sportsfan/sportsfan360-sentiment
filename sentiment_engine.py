@@ -33,7 +33,7 @@ Persona: Football fan. Tone is friendly, energetic and sports friendly.
 Constraints: Do not make up information that isn't on the internet. Do not repeat information from last report.
 Instructions: do not create WORD document.
 
-Return ONLY a valid JSON object with exactly this structure, no extra text:
+Return ONLY a valid JSON object with exactly this structure. Start your response directly with the opening curly brace '{' and end with the closing curly brace '}'. Do not write any introductory or conversational text, and do not wrap it in markdown code blocks:
 
 {
   "trending_ads": [
@@ -98,7 +98,7 @@ Audience: Cricket fans. India and global. Urban & semi-urban. Gen Z male. Gen Z 
 Persona: Cricket fan. Tone is friendly, energetic and sports friendly.
 Constraints: Do not make up information that isn't on the internet. Do not repeat information from last report. Women's cricket ONLY — no men's cricket players.
 
-Return ONLY a valid JSON object with exactly this structure, no extra text:
+Return ONLY a valid JSON object with exactly this structure. Start your response directly with the opening curly brace '{' and end with the closing curly brace '}'. Do not write any introductory or conversational text, and do not wrap it in markdown code blocks:
 
 {
   "trending_ads": [
@@ -154,7 +154,6 @@ def run_sentiment_engine(sport: str = "FIFA_WC_2026") -> dict:
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt,
                 tools=[types.Tool(google_search=types.GoogleSearch())],
-                response_mime_type="application/json",
                 temperature=0.1
             )
         )
