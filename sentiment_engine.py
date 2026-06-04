@@ -1,5 +1,6 @@
 import os
 import json
+from urllib.parse import urlparse
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
@@ -156,15 +157,28 @@ def run_sentiment_engine(sport: str = "FIFA_WC_2026") -> dict:
                     val = v.strip()
                     if not val:
                         data[k] = ""
-                    elif "vertexaisearch.cloud.google.com" in val:
+                        continue
+                    
+                    if "vertexaisearch.cloud.google.com" in val:
                         if sport == "FIFA_WC_2026":
                             data[k] = "https://www.fifa.com"
                         else:
                             data[k] = "https://www.icc-cricket.com"
-                    elif not val.startswith("http://") and not val.startswith("https://"):
-                        data[k] = "https://" + val
-                    else:
-                        data[k] = val
+                        continue
+                    
+                    # Prepend https:// if protocol is missing
+                    if not val.startswith("http://") and not val.startswith("https://"):
+                        val = "https://" + val
+                    
+                    try:
+                        parsed = urlparse(val)
+                        # Truncate to base domain to guarantee link loads successfully
+                        data[k] = f"{parsed.scheme}://{parsed.netloc}"
+                    except Exception:
+                        if sport == "FIFA_WC_2026":
+                            data[k] = "https://www.fifa.com"
+                        else:
+                            data[k] = "https://www.icc-cricket.com"
                 else:
                     clean_links(v)
         elif isinstance(data, list):
