@@ -74,9 +74,9 @@ Rules:
 - footballer_emotions: exactly 5 items. Analyze emotions driven by squad call-ups, injury concerns, retirement announcements, or training camp vibes.
 - national_emotions: exactly 5 items. Analyze national moods based on qualification pathways, visa struggles, or local fan hype.
 - trending_memes: exactly 3 items. If no memes are active, identify viral social topics or trends.
-- top_signals: exactly 5 items.
-- If a specific URL/link is not found, use the official main domain/homepage where the campaign/news is reported (e.g., "https://www.fifa.com", "https://www.espncricinfo.com", "https://www.afaqs.com") or leave it as "" (empty string).
-- NEVER output placeholder links, dummy URLs (like ending in 12345), or Rickroll links (like "https://www.youtube.com/watch?v=dQw4w9WgXcQ").
+- If a specific URL/link is not found, use the official main domain/homepage where the campaign/news is reported (e.g., "www.fifa.com", "www.espncricinfo.com", "www.afaqs.com") or leave it as "" (empty string).
+- NEVER output placeholder links, dummy URLs (like ending in 12345), or Rickroll links.
+- When outputting links, NEVER prefix them with "https://" or "http://". Instead, output them starting with "www." or the domain name (e.g., "www.youtube.com/watch?v=..." or "sportsbusinessjournal.com/..."). This is critical to prevent Google Cloud link rewriting.
 - Only use real, direct, raw source URLs found via search — never return Google Cloud redirect links (like vertexaisearch.cloud.google.com)."""
 
 # ── WT20W prompt ───────────────────────────────────────────
@@ -137,9 +137,9 @@ Rules:
 - trending_statements: exactly 5 items — women cricketers ONLY.
 - player_emotions: exactly 5 items — WOMEN cricketers ONLY, no men's players. Even in the pre-tournament phase, do NOT return "Insufficient data for this period". Instead, analyze cricketer emotions driven by squad selections, training camps, upcoming warm-up preparations, or retirement announcements.
 - fan_emotions: exactly 5 items. Analyze fan emotions driven by tournament excitement, ticketing, or team preparations.
-- national_emotions: exactly 5 items. Analyze national moods based on qualification, warm-ups, or support build-up.
-- If a specific URL/link is not found, use the official main domain/homepage where the campaign/news is reported (e.g., "https://www.icc-cricket.com", "https://www.espncricinfo.com", "https://www.afaqs.com") or leave it as "" (empty string).
-- NEVER output placeholder links, dummy URLs (like ending in 12345), or Rickroll links (like "https://www.youtube.com/watch?v=dQw4w9WgXcQ").
+- If a specific URL/link is not found, use the official main domain/homepage where the campaign/news is reported (e.g., "www.icc-cricket.com", "www.espncricinfo.com", "www.afaqs.com") or leave it as "" (empty string).
+- NEVER output placeholder links, dummy URLs (like ending in 12345), or Rickroll links.
+- When outputting links, NEVER prefix them with "https://" or "http://". Instead, output them starting with "www." or the domain name (e.g., "www.youtube.com/watch?v=..." or "sportsbusinessjournal.com/..."). This is critical to prevent Google Cloud link rewriting.
 - Only use real, direct, raw source URLs found via search — never return Google Cloud redirect links (like vertexaisearch.cloud.google.com)."""
 
 
@@ -148,6 +148,28 @@ def run_sentiment_engine(sport: str = "FIFA_WC_2026") -> dict:
 
     system_prompt = FIFA_SYSTEM if sport == "FIFA_WC_2026" else WT20W_SYSTEM
     task = FIFA_TASK if sport == "FIFA_WC_2026" else WT20W_TASK
+
+    def clean_links(data):
+        if isinstance(data, dict):
+            for k, v in list(data.items()):
+                if k == "link" and isinstance(v, str):
+                    val = v.strip()
+                    if not val:
+                        data[k] = ""
+                    elif "vertexaisearch.cloud.google.com" in val:
+                        if sport == "FIFA_WC_2026":
+                            data[k] = "https://www.fifa.com"
+                        else:
+                            data[k] = "https://www.icc-cricket.com"
+                    elif not val.startswith("http://") and not val.startswith("https://"):
+                        data[k] = "https://" + val
+                    else:
+                        data[k] = val
+                else:
+                    clean_links(v)
+        elif isinstance(data, list):
+            for item in data:
+                clean_links(item)
 
     try:
         print(f"🔍 Gemini searching real internet for {sport}...")
@@ -171,7 +193,11 @@ def run_sentiment_engine(sport: str = "FIFA_WC_2026") -> dict:
             raw = raw[start_idx:end_idx + 1]
 
         report = json.loads(raw)
-        print(f"✅ Gemini: {sport} report generated from real internet data!")
+        
+        # Post-process all links to resolve redirect issues and prefix requirements
+        clean_links(report)
+        
+        print(f"✅ Gemini: {sport} report generated and links cleaned!")
         return report
 
     except json.JSONDecodeError as e:
