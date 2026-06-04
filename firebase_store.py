@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import firebase_admin
 from firebase_admin import credentials, firestore
 from dotenv import load_dotenv
@@ -24,7 +24,9 @@ def save_report(report: dict, sport: str = "FIFA_WC_2026"):
         return None
     db = init_firebase()
     
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    # Calculate timestamp in IST (UTC+5:30)
+    ist_tz = timezone(timedelta(hours=5, minutes=30))
+    timestamp = datetime.now(ist_tz).strftime("%Y-%m-%d_%H-%M-%S")
     
     doc_data = {
         "timestamp": timestamp,
