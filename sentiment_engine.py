@@ -158,12 +158,12 @@ def run_sentiment_engine(sport: str = "FIFA_WC_2026") -> dict:
         )
 
         raw = response.text.strip()
-
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-        raw = raw.strip()
+        
+        # Find the first '{' and the last '}' to extract the JSON block cleanly
+        start_idx = raw.find('{')
+        end_idx = raw.rfind('}')
+        if start_idx != -1 and end_idx != -1:
+            raw = raw[start_idx:end_idx + 1]
 
         report = json.loads(raw)
         print(f"✅ Gemini: {sport} report generated from real internet data!")
