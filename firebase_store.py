@@ -56,6 +56,26 @@ def get_latest_report(sport: str = "FIFA_WC_2026"):
         return doc.to_dict()
     return None
 
+def list_reports(sport: str = "FIFA_WC_2026", limit: int = 50):
+    db = init_firebase()
+    collection_name = "fifaSentiments" if sport == "FIFA_WC_2026" else "wt20wSentiments"
+    docs = db.collection(collection_name)\
+             .order_by("generated_at", direction=firestore.Query.DESCENDING)\
+             .limit(limit)\
+             .stream()
+    return [doc.id for doc in docs]
+
+def get_report(sport: str = "FIFA_WC_2026", timestamp: str = None):
+    if not timestamp:
+        return None
+    db = init_firebase()
+    collection_name = "fifaSentiments" if sport == "FIFA_WC_2026" else "wt20wSentiments"
+    doc_ref = db.collection(collection_name).document(timestamp)
+    doc = doc_ref.get()
+    if doc.exists:
+        return doc.to_dict()
+    return None
+
 if __name__ == "__main__":
     print("Testing Firebase connection...")
     db = init_firebase()

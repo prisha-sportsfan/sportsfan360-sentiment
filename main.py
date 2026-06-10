@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from apscheduler.schedulers.blocking import BlockingScheduler
 from sentiment_engine import run_sentiment_engine
-from firebase_store import save_report, get_latest_report
+from firebase_store import save_report, get_latest_report, list_reports, get_report
 
 load_dotenv()
 
@@ -36,6 +36,17 @@ def latest(sport: str = "FIFA_WC_2026"):
     if report:
         return report
     return {"status": "no reports yet"}
+
+@app.get("/list-reports")
+def api_list_reports(sport: str = "FIFA_WC_2026", limit: int = 50):
+    return {"reports": list_reports(sport, limit)}
+
+@app.get("/get-report")
+def api_get_report(sport: str = "FIFA_WC_2026", timestamp: str = None):
+    report = get_report(sport, timestamp)
+    if report:
+        return report
+    return {"status": "error", "message": f"Report not found for timestamp: {timestamp}"}
 
 def start_scheduler():
     runs_per_day = int(os.getenv("RUNS_PER_DAY", 2))

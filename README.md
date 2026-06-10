@@ -112,11 +112,13 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 
 ## API Endpoints
 
-| Endpoint | Method | Purpose |
-|---|---|---|
-| `/health` | GET | Health check |
-| `/run-now` | POST | Trigger one run manually |
-| `/latest` | GET | Get latest report from Firebase |
+| Endpoint | Method | Params | Purpose |
+|---|---|---|---|
+| `/health` | GET | None | Health check |
+| `/run-now` | POST | `sport` (optional) | Trigger one run manually |
+| `/latest` | GET | `sport` (optional) | Get latest report from Firebase |
+| `/list-reports` | GET | `sport` (optional), `limit` (optional) | List available report timestamps |
+| `/get-report` | GET | `sport`, `timestamp` | Get a specific report by timestamp |
 
 ---
 
