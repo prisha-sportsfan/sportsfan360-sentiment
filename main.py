@@ -1,11 +1,12 @@
 import os
 import threading
-from fastapi import FastAPI
+from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from apscheduler.schedulers.blocking import BlockingScheduler
 from sentiment_engine import run_sentiment_engine
 from firebase_store import save_report, get_latest_report, list_reports, get_report
+from dolly_bot import dolly_auto_run_all_cricket_rooms
 
 load_dotenv()
 
@@ -29,6 +30,11 @@ def run_now(sport: str = "FIFA_WC_2026"):
         timestamp = save_report(report, sport)
         return {"status": "success", "saved_as": timestamp, "sport": sport}
     return {"status": "failed"}
+
+@app.post("/run-dolly")
+def run_dolly(background_tasks: BackgroundTasks):
+    background_tasks.add_task(dolly_auto_run_all_cricket_rooms)
+    return {"status": "triggered", "message": "Dolly match bot execution started in the background."}
 
 @app.get("/latest")
 def latest(sport: str = "FIFA_WC_2026"):
