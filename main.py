@@ -76,28 +76,18 @@ def start_scheduler():
         hours=interval_hours
     )
 
-    # ── Dolly Auto Schedule: 3x daily at 9 AM, 3 PM, 9 PM IST ──────────────
-    # All times converted to UTC (IST = UTC + 5:30)
-    # IST 09:00 = UTC 03:30
+    # ── Dolly Auto Schedule: every 25 minutes ──────────────────────────────
+    # During a live match she posts every ~25 mins (in-play).
+    # Pre-match and post-match she posts once only (phase lock).
+    # When no match is found she stays completely silent.
     scheduler.add_job(
         dolly_auto_run_all_rooms,
-        'cron', hour=3, minute=30,
-        id="dolly_morning"
-    )
-    # IST 15:00 = UTC 09:30
-    scheduler.add_job(
-        dolly_auto_run_all_rooms,
-        'cron', hour=9, minute=30,
-        id="dolly_afternoon"
-    )
-    # IST 21:00 = UTC 15:30
-    scheduler.add_job(
-        dolly_auto_run_all_rooms,
-        'cron', hour=15, minute=30,
-        id="dolly_evening"
+        'interval',
+        minutes=25,
+        id="dolly_interval"
     )
 
-    print("🐬 Dolly auto-scheduled: 9 AM, 3 PM, 9 PM IST daily.")
+    print("🐬 Dolly auto-scheduled: every 25 minutes.")
     scheduler.start()
 
 # Start scheduler in background when server starts

@@ -14,7 +14,7 @@ client = genai.Client(
 )
 
 IST = timezone(timedelta(hours=5, minutes=30))
-COOLDOWN_MINUTES = 15  # Minimum gap between posts in the same room/feed
+COOLDOWN_MINUTES = 20  # Minimum gap between posts in the same room/feed (matches 25-min schedule)
 
 # ── Phase Lock Helpers ────────────────────────────────────────────────────────
 
@@ -22,7 +22,13 @@ def get_phase_lock_key(sport: str, match_id: str, phase: str) -> str:
     return f"dolly_phase_lock_{sport}_{match_id}_{phase}"
 
 def has_phase_been_posted(db, sport: str, match_id: str, phase: str) -> bool:
-    """Returns True if Dolly has already posted for this match's phase today."""
+    """
+    Returns True if Dolly should be blocked from posting.
+    - PRE-MATCH and POST-MATCH: locked once per match (expires after 24h).
+    - IN-PLAY: NOT locked — cooldown check handles spacing (every ~20 mins).
+    """
+    if phase == "IN-PLAY":
+        return False  # Always allow in-play; cooldown check handles spacing
     key = get_phase_lock_key(sport, match_id, phase)
     doc = db.collection("dollyPhaseLocks").document(key).get()
     if not doc.exists:
