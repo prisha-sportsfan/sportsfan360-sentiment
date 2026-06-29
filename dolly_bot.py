@@ -7,33 +7,42 @@ from google.genai import types
 from firebase_store import init_firebase
 
 # ── Gemini Client ─────────────────────────────────────────────────────────────
-client = genai.Client(
-    vertexai=True,
-    project=os.getenv("GCP_PROJECT_ID", "fleet-gift-498306-p7"),
-    location=os.getenv("GCP_LOCATION", "us-central1")
-)
+# Uses GEMINI_API_KEY if available (AI Studio) to avoid authentication issues.
+# Falls back to Vertex AI if key is not set.
+api_key = os.getenv("GEMINI_API_KEY")
+if api_key:
+    client = genai.Client(api_key=api_key)
+    print("🔑 Using Google AI Studio API Key for Gemini Client.")
+else:
+    client = genai.Client(
+        vertexai=True,
+        project=os.getenv("GCP_PROJECT_ID", "fleet-gift-498306-p7"),
+        location=os.getenv("GCP_LOCATION", "us-central1")
+    )
+    print("☁️ Using Vertex AI for Gemini Client.")
 
 IST = timezone(timedelta(hours=5, minutes=30))
 COOLDOWN_MINUTES = 20  # Minimum gap between posts in the same room/feed (matches 25-min schedule)
 
 # ── Phase Lock Helpers ────────────────────────────────────────────────────────
 
-def get_phase_lock_key(sport: str, match_id: str, phase: str) -> str:
-    return f"dolly_phase_lock_{sport}_{match_id}_{phase}"
+def get_phase_lock_key(sport: str, match_id: str, phase: str, room_id: str = None) -> str:
+    room_suffix = f"_{room_id}" if room_id else "_global"
+    return f"dolly_phase_lock_{sport}_{match_id}_{phase}{room_suffix}"
 
 PRE_MATCH_MAX_POSTS = 2   # 2 rounds of pre-match questions (~50 mins build-up)
 POST_MATCH_MAX_POSTS = 2  # 2 rounds of post-match questions (~50 mins wrap-up)
 
-def has_phase_been_posted(db, sport: str, match_id: str, phase: str) -> bool:
+def has_phase_been_posted(db, sport: str, match_id: str, phase: str, room_id: str = None) -> bool:
     """
-    Returns True if Dolly should be blocked from posting.
+    Returns True if Dolly should be blocked from posting in this specific room.
     - IN-PLAY: Never blocked here — cooldown check handles spacing.
-    - PRE-MATCH: Blocked after PRE_MATCH_MAX_POSTS rounds (3 rounds = 75 mins of build-up).
-    - POST-MATCH: Blocked after 1 post.
+    - PRE-MATCH: Blocked after PRE_MATCH_MAX_POSTS rounds in this room.
+    - POST-MATCH: Blocked after POST_MATCH_MAX_POSTS rounds in this room.
     """
     if phase == "IN-PLAY":
         return False  # Cooldown handles in-play spacing
-    key = get_phase_lock_key(sport, match_id, phase)
+    key = get_phase_lock_key(sport, match_id, phase, room_id)
     doc = db.collection("dollyPhaseLocks").document(key).get()
     if not doc.exists:
         return False
@@ -47,15 +56,16 @@ def has_phase_been_posted(db, sport: str, match_id: str, phase: str) -> bool:
     max_posts = PRE_MATCH_MAX_POSTS if phase == "PRE-MATCH" else POST_MATCH_MAX_POSTS
     return post_count >= max_posts
 
-def stamp_phase_lock(db, sport: str, match_id: str, phase: str):
-    """Stamps/increments this phase's post count in Firestore."""
-    key = get_phase_lock_key(sport, match_id, phase)
+def stamp_phase_lock(db, sport: str, match_id: str, phase: str, room_id: str = None):
+    """Stamps/increments this phase's post count in Firestore for this specific room."""
+    key = get_phase_lock_key(sport, match_id, phase, room_id)
     doc = db.collection("dollyPhaseLocks").document(key).get()
     existing_count = doc.to_dict().get("count", 0) if doc.exists else 0
     db.collection("dollyPhaseLocks").document(key).set({
         "sport": sport,
         "matchId": match_id,
         "phase": phase,
+        "roomId": room_id or "global",
         "postedAt": int(time.time() * 1000),
         "count": existing_count + 1,
     })
@@ -81,27 +91,25 @@ def was_recently_posted(db, room_id=None, sport="cricket", cooldown_minutes=COOL
         print(f"⚠️ Cooldown check error: {e}")
     return False
 
-# ── Existing Questions Helper ─────────────────────────────────────────────────
-
 def get_existing_questions(db, room_id=None, sport="cricket"):
-    """Fetches last 30 question texts to prevent duplicate posts."""
+    """Fetches last 30 question texts in this specific room or feed to prevent duplicate posts."""
     questions = []
     try:
-        global_ref = db.collection("roarPosts").where("authorUid", "==", "dolly-dolphin-bot") \
-            .where("sport", "==", sport).stream()
-        global_posts = sorted([d for d in global_ref],
-                               key=lambda x: x.to_dict().get("createdAt", 0), reverse=True)
-        for doc in global_posts[:30]:
-            text = doc.to_dict().get("text")
-            if text:
-                questions.append(text)
-
         if room_id:
             room_ref = db.collection("roarRooms").document(room_id).collection("messages") \
                 .where("authorUid", "==", "dolly-dolphin-bot").stream()
             room_posts = sorted([d for d in room_ref],
                                  key=lambda x: x.to_dict().get("createdAt", 0), reverse=True)
             for doc in room_posts[:30]:
+                text = doc.to_dict().get("text")
+                if text:
+                    questions.append(text)
+        else:
+            global_ref = db.collection("roarPosts").where("authorUid", "==", "dolly-dolphin-bot") \
+                .where("sport", "==", sport).stream()
+            global_posts = sorted([d for d in global_ref],
+                                   key=lambda x: x.to_dict().get("createdAt", 0), reverse=True)
+            for doc in global_posts[:30]:
                 text = doc.to_dict().get("text")
                 if text:
                     questions.append(text)
@@ -271,7 +279,9 @@ def generate_questions(match: dict, sport: str, existing_str: str) -> list:
     Do NOT generate questions similar to any of these already posted:
     {existing_str if existing_str else "None"}
     
-    Return ONLY a valid JSON list:
+    Generate exactly 1 prediction and 1 debate.
+    
+    Return ONLY a valid JSON list of exactly 2 objects:
     [
       {{
         "type": "prediction",
@@ -391,13 +401,13 @@ def run_dolly_for_sport(sport: str, room_id=None):
     phase = match.get("phase", "PRE-MATCH")
 
     # Step 2: Phase lock check
-    if has_phase_been_posted(db, sport, match_id, phase):
-        print(f"🔒 Phase lock active: Already posted [{phase}] for match [{match_id}]. Skipping.")
+    if has_phase_been_posted(db, sport, match_id, phase, room_id):
+        print(f"🔒 Phase lock active: Already posted [{phase}] for match [{match_id}] in target [{target}]. Skipping.")
         return
 
     # Step 3: Cooldown check
     if was_recently_posted(db, room_id=room_id, sport=sport):
-        print(f"⏳ Cooldown active: A post was made less than {COOLDOWN_MINUTES} mins ago. Skipping.")
+        print(f"⏳ Cooldown active: A post was made less than {COOLDOWN_MINUTES} mins ago in target [{target}]. Skipping.")
         return
 
     # Step 4: Generate questions
@@ -406,14 +416,14 @@ def run_dolly_for_sport(sport: str, room_id=None):
     polls = generate_questions(match, sport, existing_str)
 
     if not polls:
-        print(f"⚠️ No questions generated for {sport} [{phase}]. Staying silent.")
+        print(f"⚠️ No questions generated for {sport} [{phase}] in target [{target}]. Staying silent.")
         return
 
     # Step 5: Publish
     publish_questions(db, polls, sport, room_id=room_id)
 
     # Step 6: Stamp phase lock
-    stamp_phase_lock(db, sport, match_id, phase)
+    stamp_phase_lock(db, sport, match_id, phase, room_id)
     print(f"✅ Dolly done for sport={sport}, phase={phase}, target={target}")
 
 
