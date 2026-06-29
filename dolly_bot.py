@@ -21,32 +21,43 @@ COOLDOWN_MINUTES = 20  # Minimum gap between posts in the same room/feed (matche
 def get_phase_lock_key(sport: str, match_id: str, phase: str) -> str:
     return f"dolly_phase_lock_{sport}_{match_id}_{phase}"
 
+PRE_MATCH_MAX_POSTS = 2   # 2 rounds of pre-match questions (~50 mins build-up)
+POST_MATCH_MAX_POSTS = 2  # 2 rounds of post-match questions (~50 mins wrap-up)
+
 def has_phase_been_posted(db, sport: str, match_id: str, phase: str) -> bool:
     """
     Returns True if Dolly should be blocked from posting.
-    - PRE-MATCH and POST-MATCH: locked once per match (expires after 24h).
-    - IN-PLAY: NOT locked — cooldown check handles spacing (every ~20 mins).
+    - IN-PLAY: Never blocked here — cooldown check handles spacing.
+    - PRE-MATCH: Blocked after PRE_MATCH_MAX_POSTS rounds (3 rounds = 75 mins of build-up).
+    - POST-MATCH: Blocked after 1 post.
     """
     if phase == "IN-PLAY":
-        return False  # Always allow in-play; cooldown check handles spacing
+        return False  # Cooldown handles in-play spacing
     key = get_phase_lock_key(sport, match_id, phase)
     doc = db.collection("dollyPhaseLocks").document(key).get()
     if not doc.exists:
         return False
     data = doc.to_dict()
     posted_at = data.get("postedAt", 0)
-    # Lock expires after 24 hours
+    post_count = data.get("count", 1)
+    # Lock expires after 24 hours regardless
     elapsed_hours = (time.time() * 1000 - posted_at) / (1000 * 3600)
-    return elapsed_hours < 24
+    if elapsed_hours >= 24:
+        return False
+    max_posts = PRE_MATCH_MAX_POSTS if phase == "PRE-MATCH" else POST_MATCH_MAX_POSTS
+    return post_count >= max_posts
 
 def stamp_phase_lock(db, sport: str, match_id: str, phase: str):
-    """Stamps this phase as done in Firestore so Dolly won't repeat it."""
+    """Stamps/increments this phase's post count in Firestore."""
     key = get_phase_lock_key(sport, match_id, phase)
+    doc = db.collection("dollyPhaseLocks").document(key).get()
+    existing_count = doc.to_dict().get("count", 0) if doc.exists else 0
     db.collection("dollyPhaseLocks").document(key).set({
         "sport": sport,
         "matchId": match_id,
         "phase": phase,
         "postedAt": int(time.time() * 1000),
+        "count": existing_count + 1,
     })
 
 def was_recently_posted(db, room_id=None, sport="cricket", cooldown_minutes=COOLDOWN_MINUTES) -> bool:
@@ -408,30 +419,72 @@ def run_dolly_for_sport(sport: str, room_id=None):
 
 # ── Automated Full Run ────────────────────────────────────────────────────────
 
+def find_infinity_room_id(db) -> str | None:
+    """
+    Dynamically finds the SF360 Infinity Room by querying Firestore.
+    Returns the room ID if found, else None.
+    No hardcoding — works even if the room is renamed or recreated.
+    """
+    try:
+        rooms = db.collection("roarRooms").stream()
+        for room in rooms:
+            data = room.to_dict()
+            name = (data.get("name") or "").lower()
+            if "infinity" in name:
+                print(f"🌐 Infinity Room found: {room.id} ('{data.get('name')}')")
+                return room.id
+    except Exception as e:
+        print(f"⚠️ Could not find Infinity Room: {e}")
+    return None
+
+
 def dolly_auto_run_all_rooms():
     """
-    Master runner:
-    - Finds all cricket rooms and posts cricket questions.
-    - Finds all football rooms and posts football questions.
-    - Also posts to the global feed for both sports.
+    Master runner — runs automatically every 25 minutes via APScheduler on Render.
+
+    Logic:
+    - SF360 Infinity Room (common room): always gets BOTH cricket and football posts.
+    - Cricket rooms: get cricket posts only (based on most upcoming cricket match).
+    - Football rooms: get football posts only (based on most upcoming football match).
+    - Global feed: gets both cricket and football posts.
+    - No hardcoding of match details — Gemini + Google Search detects live/upcoming matches.
+    - Anti-spam: 20-min cooldown between posts in any room.
+    - Anti-hallucination: silent if no match found.
+    - Pre-match: 2 rounds max. In-play: every 25 mins. Post-match: 2 rounds max.
     """
     db = init_firebase()
+    posted_room_ids = set()  # Prevents double-posting to same room
 
-    # ── Cricket ──────────────────────────────────────────
-    print("\n🏏 ── Dolly: Cricket Run ──")
-    run_dolly_for_sport("cricket", room_id=None)  # Global feed
+    # ── Step 1: SF360 Infinity Room (common room — cricket + football) ────────
+    print("\n🌐 ── Dolly: SF360 Infinity Room ──")
+    infinity_room_id = find_infinity_room_id(db)
+    if infinity_room_id:
+        run_dolly_for_sport("cricket", room_id=infinity_room_id)
+        run_dolly_for_sport("football", room_id=infinity_room_id)
+        posted_room_ids.add(infinity_room_id)
+    else:
+        print("⚠️ Infinity Room not found. Skipping.")
 
+    # ── Step 2: Global feed (cricket + football) ──────────────────────────────
+    print("\n🌍 ── Dolly: Global Feed ──")
+    run_dolly_for_sport("cricket", room_id=None)
+    run_dolly_for_sport("football", room_id=None)
+
+    # ── Step 3: All cricket rooms (cricket posts only) ────────────────────────
+    print("\n🏏 ── Dolly: Cricket Rooms ──")
     cricket_rooms = db.collection("roarRooms").where("sport", "==", "cricket").stream()
     for room in cricket_rooms:
-        run_dolly_for_sport("cricket", room_id=room.id)
+        if room.id not in posted_room_ids:
+            run_dolly_for_sport("cricket", room_id=room.id)
+            posted_room_ids.add(room.id)
 
-    # ── Football ─────────────────────────────────────────
-    print("\n⚽ ── Dolly: Football Run ──")
-    run_dolly_for_sport("football", room_id=None)  # Global feed
-
+    # ── Step 4: All football rooms (football posts only) ─────────────────────
+    print("\n⚽ ── Dolly: Football Rooms ──")
     football_rooms = db.collection("roarRooms").where("sport", "==", "football").stream()
     for room in football_rooms:
-        run_dolly_for_sport("football", room_id=room.id)
+        if room.id not in posted_room_ids:
+            run_dolly_for_sport("football", room_id=room.id)
+            posted_room_ids.add(room.id)
 
     print("\n🐬 Dolly full run complete.")
 
