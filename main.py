@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from apscheduler.schedulers.blocking import BlockingScheduler
 from sentiment_engine import run_sentiment_engine
 from firebase_store import save_report, get_latest_report, list_reports, get_report
-from dolly_bot import dolly_auto_run_all_cricket_rooms
+from dolly_bot import dolly_auto_run_all_rooms, dolly_auto_run_all_cricket_rooms
 
 load_dotenv()
 
@@ -33,8 +33,9 @@ def run_now(sport: str = "FIFA_WC_2026"):
 
 @app.post("/run-dolly")
 def run_dolly(background_tasks: BackgroundTasks):
-    background_tasks.add_task(dolly_auto_run_all_cricket_rooms)
-    return {"status": "triggered", "message": "Dolly match bot execution started in the background."}
+    """Manual trigger: runs Dolly for all sports (cricket + football) across all rooms."""
+    background_tasks.add_task(dolly_auto_run_all_rooms)
+    return {"status": "triggered", "message": "Dolly full run started in background (cricket + football)."}
 
 @app.get("/latest")
 def latest(sport: str = "FIFA_WC_2026"):
@@ -74,6 +75,29 @@ def start_scheduler():
         'interval',
         hours=interval_hours
     )
+
+    # ── Dolly Auto Schedule: 3x daily at 9 AM, 3 PM, 9 PM IST ──────────────
+    # All times converted to UTC (IST = UTC + 5:30)
+    # IST 09:00 = UTC 03:30
+    scheduler.add_job(
+        dolly_auto_run_all_rooms,
+        'cron', hour=3, minute=30,
+        id="dolly_morning"
+    )
+    # IST 15:00 = UTC 09:30
+    scheduler.add_job(
+        dolly_auto_run_all_rooms,
+        'cron', hour=9, minute=30,
+        id="dolly_afternoon"
+    )
+    # IST 21:00 = UTC 15:30
+    scheduler.add_job(
+        dolly_auto_run_all_rooms,
+        'cron', hour=15, minute=30,
+        id="dolly_evening"
+    )
+
+    print("🐬 Dolly auto-scheduled: 9 AM, 3 PM, 9 PM IST daily.")
     scheduler.start()
 
 # Start scheduler in background when server starts
