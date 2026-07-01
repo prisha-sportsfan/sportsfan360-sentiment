@@ -36,12 +36,13 @@ POST_MATCH_MAX_POSTS = 2  # 2 rounds of post-match questions (~50 mins wrap-up)
 def has_phase_been_posted(db, sport: str, match_id: str, phase: str, room_id: str = None) -> bool:
     """
     Returns True if Dolly should be blocked from posting in this specific room.
-    - IN-PLAY: Never blocked here — cooldown check handles spacing.
-    - PRE-MATCH: Blocked after PRE_MATCH_MAX_POSTS rounds in this room.
-    - POST-MATCH: Blocked after POST_MATCH_MAX_POSTS rounds in this room.
+    - PRE-MATCH: Disabled completely (always returns True).
+    - IN-PLAY: Spaced out every 20 minutes using the timestamp check.
+    - POST-MATCH: Locked to max 1 post.
     """
-    if phase == "IN-PLAY":
-        return False  # Cooldown handles in-play spacing
+    if phase == "PRE-MATCH":
+        return True  # Stop/skip pre-match posting completely
+        
     key = get_phase_lock_key(sport, match_id, phase, room_id)
     doc = db.collection("dollyPhaseLocks").document(key).get()
     if not doc.exists:
@@ -49,12 +50,16 @@ def has_phase_been_posted(db, sport: str, match_id: str, phase: str, room_id: st
     data = doc.to_dict()
     posted_at = data.get("postedAt", 0)
     post_count = data.get("count", 1)
-    # Lock expires after 24 hours regardless
-    elapsed_hours = (time.time() * 1000 - posted_at) / (1000 * 3600)
-    if elapsed_hours >= 24:
-        return False
-    max_posts = PRE_MATCH_MAX_POSTS if phase == "PRE-MATCH" else POST_MATCH_MAX_POSTS
-    return post_count >= max_posts
+    
+    elapsed_minutes = (time.time() * 1000 - posted_at) / (1000 * 60)
+    
+    if phase == "IN-PLAY":
+        # Block if it has been less than 20 minutes since last in-play post
+        return elapsed_minutes < 20
+    elif phase == "POST-MATCH":
+        # Block permanently (max 1 post) for post-match
+        return post_count >= 1
+    return False
 
 def stamp_phase_lock(db, sport: str, match_id: str, phase: str, room_id: str = None):
     """Stamps/increments this phase's post count in Firestore for this specific room."""
@@ -128,58 +133,47 @@ def detect_current_match(sport: str) -> dict | None:
 
     if sport == "cricket":
         search_query = f"""
-        Search Google right now for: "cricket match today live OR upcoming {now_ist}".
-        Find the most relevant cricket match currently live OR starting within the next 24 hours.
-        Include both Men's and Women's international cricket (ICC events, bilateral series, etc.).
+        Search Google right now for: "India vs England 1st T20I match live score OR match status today {now_ist}".
+        Find the match details for India vs England Men's 1st T20I starting tonight at 10:00 PM IST (Chester-le-Street).
         
-        If you find a credible match, return ONLY this JSON (no extra text):
+        If you find the match, return ONLY this JSON:
         {{
           "found": true,
-          "matchId": "short-unique-id-no-spaces",
-          "teams": "Team A vs Team B",
-          "tournament": "Tournament Name",
-          "venue": "Venue, City",
-          "matchDate": "YYYY-MM-DD",
+          "matchId": "ind-vs-eng-t20-jul1",
+          "teams": "India vs England",
+          "tournament": "India tour of England 2026, 1st T20I",
+          "venue": "Chester-le-Street",
+          "matchDate": "2026-07-01",
           "phase": "PRE-MATCH or IN-PLAY or POST-MATCH",
           "liveScore": "Score if live, else null",
-          "keyPlayers": "Comma-separated key player names",
-          "format": "T20 or ODI or Test"
+          "keyPlayers": "Harry Brook, Jacob Bethell, Ishan Kishan, Suryakumar Yadav",
+          "format": "T20"
         }}
         
-        If you cannot find a credible, confirmed cricket match today or tomorrow, return ONLY:
+        If the match is not found or not today, fallback to search for any other live international cricket match today and return the same JSON format. If no match at all, return:
         {{"found": false}}
-        
-        STRICT RULES:
-        - Only return a match if you found it in a real search result (cricket board, ESPN, Cricbuzz, BBC Sport, etc.)
-        - Do NOT make up or guess any match, score, or player names.
-        - Do NOT return a match that finished more than 6 hours ago.
         """
     else:  # football / FIFA
         search_query = f"""
-        Search Google right now for: "FIFA World Cup 2026 match today live OR upcoming {now_ist}".
-        Find the most relevant FIFA World Cup 2026 match currently live OR starting within the next 24 hours.
+        Search Google right now for: "England vs DR Congo FIFA World Cup 2026 match live score OR status today {now_ist}".
+        Find the match details for England vs DR Congo starting tonight at 9:30 PM IST (Atlanta).
         
-        If you find a credible match, return ONLY this JSON (no extra text):
+        If you find the match, return ONLY this JSON:
         {{
           "found": true,
-          "matchId": "short-unique-id-no-spaces",
-          "teams": "Team A vs Team B",
-          "tournament": "FIFA World Cup 2026",
-          "venue": "Venue, City",
-          "matchDate": "YYYY-MM-DD",
+          "matchId": "eng-vs-drcongo-fifa-jul1",
+          "teams": "England vs DR Congo",
+          "tournament": "FIFA World Cup 2026, Round of 32",
+          "venue": "Atlanta",
+          "matchDate": "2026-07-01",
           "phase": "PRE-MATCH or IN-PLAY or POST-MATCH",
           "liveScore": "Score if live, else null",
-          "keyPlayers": "Comma-separated key player names",
+          "keyPlayers": "Jude Bellingham, Harry Kane, Yoane Wissa, Meschack Elia",
           "format": "90 mins"
         }}
         
-        If you cannot find a credible, confirmed FIFA match today or tomorrow, return ONLY:
+        If the match is not found or not today, fallback to search for any other live FIFA World Cup 2026 match today and return the same JSON format. If no match at all, return:
         {{"found": false}}
-        
-        STRICT RULES:
-        - Only return a match if you found it in a real search result (FIFA.com, ESPN, BBC Sport, etc.)
-        - Do NOT make up or guess any match, score, or player names.
-        - Do NOT return a match that finished more than 6 hours ago.
         """
 
     try:
@@ -209,10 +203,12 @@ def detect_current_match(sport: str) -> dict | None:
 
 # ── Question Generator ────────────────────────────────────────────────────────
 
-def generate_questions(match: dict, sport: str, existing_str: str) -> list:
+def generate_questions(match: dict, sport: str, existing_str: str, pre_match_count: int = 0) -> list:
     """
-    Uses Gemini + Google Search to generate 2 unique, non-hallucinatory questions
-    (1 prediction + 1 debate) based on the detected match and phase.
+    Uses Gemini + Google Search to generate unique, non-hallucinatory questions.
+    For PRE-MATCH, generates exactly 1 question, alternating between prediction (if even count) and debate (if odd).
+    For IN-PLAY, generates 2 questions (1 prediction + 1 debate).
+    For POST-MATCH, generates 2 questions (1 prediction + 1 debate).
     """
     phase = match.get("phase", "PRE-MATCH")
     teams = match.get("teams", "Unknown Teams")
@@ -237,6 +233,18 @@ def generate_questions(match: dict, sport: str, existing_str: str) -> list:
             "POST-MATCH": "The match has ended. Focus on match review: goal scorers, key moments, and what this result means for the tournament."
         }.get(phase, "")
 
+    # For PRE-MATCH, alternate types based on the count of already posted pre-match questions
+    if phase == "PRE-MATCH":
+        if pre_match_count % 2 == 0:
+            target_type = "prediction"
+            target_instruction = "Generate exactly 1 PREDICTION. No debate questions."
+        else:
+            target_type = "debate"
+            target_instruction = "Generate exactly 1 DEBATE. No prediction questions."
+    else:
+        target_type = "both"
+        target_instruction = "Generate exactly 1 prediction AND 1 debate."
+
     prompt = f"""
     You are Dolly, a passionate and highly knowledgeable {sport_label} fan and analyst.
     
@@ -250,6 +258,8 @@ def generate_questions(match: dict, sport: str, existing_str: str) -> list:
     - Key Players: {key_players}
     
     PHASE INSTRUCTION: {phase_instruction}
+    
+    TARGET: {target_instruction}
     
     YOUR QUESTION STYLE:
     - Short and punchy. Maximum 2 sentences. 1 sentence is even better.
@@ -279,19 +289,11 @@ def generate_questions(match: dict, sport: str, existing_str: str) -> list:
     Do NOT generate questions similar to any of these already posted:
     {existing_str if existing_str else "None"}
     
-    Generate exactly 1 prediction and 1 debate.
-    
-    Return ONLY a valid JSON list of exactly 2 objects:
+    Return ONLY a valid JSON list of objects:
     [
       {{
-        "type": "prediction",
-        "text": "Short prediction question?",
-        "sideA": "Yes",
-        "sideB": "No"
-      }},
-      {{
-        "type": "debate",
-        "text": "Short debate question?",
+        "type": "prediction" or "debate",
+        "text": "Short question?",
         "sideA": "Option A",
         "sideB": "Option B"
       }}
@@ -400,6 +402,11 @@ def run_dolly_for_sport(sport: str, room_id=None):
     match_id = match.get("matchId", "unknown")
     phase = match.get("phase", "PRE-MATCH")
 
+    # Fetch current count for alternating pre-match question generation
+    key = get_phase_lock_key(sport, match_id, phase, room_id)
+    doc = db.collection("dollyPhaseLocks").document(key).get()
+    existing_count = doc.to_dict().get("count", 0) if doc.exists else 0
+
     # Step 2: Phase lock check
     if has_phase_been_posted(db, sport, match_id, phase, room_id):
         print(f"🔒 Phase lock active: Already posted [{phase}] for match [{match_id}] in target [{target}]. Skipping.")
@@ -413,7 +420,7 @@ def run_dolly_for_sport(sport: str, room_id=None):
     # Step 4: Generate questions
     existing = get_existing_questions(db, room_id=room_id, sport=sport)
     existing_str = "\n".join([f"- {q}" for q in existing]) if existing else "None"
-    polls = generate_questions(match, sport, existing_str)
+    polls = generate_questions(match, sport, existing_str, pre_match_count=existing_count)
 
     if not polls:
         print(f"⚠️ No questions generated for {sport} [{phase}] in target [{target}]. Staying silent.")

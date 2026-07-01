@@ -76,18 +76,18 @@ def start_scheduler():
         hours=interval_hours
     )
 
-    # ── Dolly Auto Schedule: every 25 minutes ──────────────────────────────
-    # During a live match she posts every ~25 mins (in-play).
-    # Pre-match and post-match she posts once only (phase lock).
-    # When no match is found she stays completely silent.
+    # ── Dolly Auto Schedule: every 20 minutes ──────────────────────────────
+    # - Pre-match is completely disabled (handled by backend team).
+    # - During a live match (In-Play) Dolly posts every 20 minutes.
+    # - Post-match Dolly posts exactly 1 final post.
     scheduler.add_job(
         dolly_auto_run_all_rooms,
         'interval',
-        minutes=25,
+        minutes=20,
         id="dolly_interval"
     )
 
-    print("🐬 Dolly auto-scheduled: every 25 minutes.")
+    print("🐬 Dolly auto-scheduled: every 20 minutes.")
     scheduler.start()
 
 # Start scheduler in background when server starts
