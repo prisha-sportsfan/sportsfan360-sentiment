@@ -7,6 +7,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from sentiment_engine import run_sentiment_engine
 from firebase_store import save_report, get_latest_report, list_reports, get_report
 from dolly_bot import dolly_auto_run_all_rooms, dolly_auto_run_all_cricket_rooms
+from research_pipeline import run_match_research
 
 load_dotenv()
 
@@ -36,6 +37,12 @@ def run_dolly(background_tasks: BackgroundTasks):
     """Manual trigger: runs Dolly for all sports (cricket + football) across all rooms."""
     background_tasks.add_task(dolly_auto_run_all_rooms)
     return {"status": "triggered", "message": "Dolly full run started in background (cricket + football)."}
+
+@app.post("/run-research")
+def run_research(match_id: str, team_a: str, team_b: str, sport: str, competition: str, background_tasks: BackgroundTasks):
+    """Triggers automated pre-match LLM research grounding for a specific scheduled match."""
+    background_tasks.add_task(run_match_research, match_id, team_a, team_b, sport, competition)
+    return {"status": "triggered", "message": f"Pre-match research pipeline started for match [{match_id}]."}
 
 @app.get("/latest")
 def latest(sport: str = "FIFA_WC_2026"):
@@ -76,18 +83,18 @@ def start_scheduler():
         hours=interval_hours
     )
 
-    # ── Dolly Auto Schedule: every 20 minutes ──────────────────────────────
+    # ── Dolly Auto Schedule: every 15 minutes ──────────────────────────────
     # - Pre-match is completely disabled (handled by backend team).
-    # - During a live match (In-Play) Dolly posts every 20 minutes.
+    # - During a live match (In-Play) Dolly posts every 15 minutes.
     # - Post-match Dolly posts exactly 1 final post.
     scheduler.add_job(
         dolly_auto_run_all_rooms,
         'interval',
-        minutes=20,
+        minutes=15,
         id="dolly_interval"
     )
 
-    print("🐬 Dolly auto-scheduled: every 20 minutes.")
+    print("🐬 Dolly auto-scheduled: every 15 minutes.")
     scheduler.start()
 
 # Start scheduler in background when server starts

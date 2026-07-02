@@ -22,7 +22,7 @@ else:
     print("☁️ Using Vertex AI for Gemini Client.")
 
 IST = timezone(timedelta(hours=5, minutes=30))
-COOLDOWN_MINUTES = 20  # Minimum gap between posts in the same room/feed (matches 25-min schedule)
+COOLDOWN_MINUTES = 15  # Minimum gap between posts in the same room/feed (matches 15-min schedule)
 
 # ── Phase Lock Helpers ────────────────────────────────────────────────────────
 
@@ -54,8 +54,8 @@ def has_phase_been_posted(db, sport: str, match_id: str, phase: str, room_id: st
     elapsed_minutes = (time.time() * 1000 - posted_at) / (1000 * 60)
     
     if phase == "IN-PLAY":
-        # Block if it has been less than 20 minutes since last in-play post
-        return elapsed_minutes < 20
+        # Block if it has been less than 15 minutes since last in-play post
+        return elapsed_minutes < 15
     elif phase == "POST-MATCH":
         # Block permanently (max 1 post) for post-match
         return post_count >= 1
@@ -382,56 +382,169 @@ def publish_questions(db, polls: list, sport: str, room_id=None):
 def run_dolly_for_sport(sport: str, room_id=None):
     """
     Full pipeline for one sport:
-    1. Detect current match via Gemini + Google Search
-    2. Check phase lock (no double-posting for same phase)
-    3. Check cooldown (no posting if last post was < 15 mins ago)
-    4. Generate questions
-    5. Publish to Firestore
-    6. Stamp the phase lock
+    1. Check if there is an active focus match linked to this room
+    2. Fall back to global match detection if no link exists
+    3. Check live status gating (silent if not live)
+    4. Check cooldown & phase locks
+    5. Fetch 4-Pillar data (Rivalries, Stats, History, Form) for story prompt enrichment
+    6. Generate storytelling questions and publish to Firestore
     """
     db = init_firebase()
     target = f"Room [{room_id}]" if room_id else "Global Feed"
     print(f"\n🐬 Dolly running for sport={sport}, target={target}")
 
-    # Step 1: Detect match
-    match = detect_current_match(sport)
-    if not match:
-        print(f"⏭️ No match found for {sport}. Dolly will stay silent.")
+    match_id = None
+    match_data = None
+
+    # Step 1: Linked Match Resolution
+    if room_id:
+        room_doc = db.collection("roarRooms").document(room_id).get()
+        if room_doc.exists:
+            match_id = room_doc.to_dict().get("matchId")
+            if match_id:
+                match_doc = db.collection("matches").document(match_id).get()
+                if match_doc.exists:
+                    match_data = match_doc.to_dict()
+                    print(f"🔗 Bound to focus match: {match_data.get('team_a')} vs {match_data.get('team_b')} via room matchId [{match_id}]")
+
+    # Step 2: Fallback to detect live match from matches table
+    if not match_data:
+        matches_ref = db.collection("matches")\
+            .where("sport", "==", sport)\
+            .where("status", "==", "live")\
+            .stream()
+        for doc in matches_ref:
+            match_id = doc.id
+            match_data = doc.to_dict()
+            print(f"🎯 Detected active live match from table: {match_data.get('team_a')} vs {match_data.get('team_b')} [{match_id}]")
+            break
+
+    if not match_data:
+        print(f"⏭️ No active live match scheduled in database for {sport}. Dolly will stay silent.")
         return
 
-    match_id = match.get("matchId", "unknown")
-    phase = match.get("phase", "PRE-MATCH")
+    # Verify status
+    if match_data.get("status") != "live":
+        print(f"🔒 Match [{match_id}] is {match_data.get('status')}. Dolly is gated to live matches only. Skipping.")
+        return
 
-    # Fetch current count for alternating pre-match question generation
-    key = get_phase_lock_key(sport, match_id, phase, room_id)
-    doc = db.collection("dollyPhaseLocks").document(key).get()
-    existing_count = doc.to_dict().get("count", 0) if doc.exists else 0
+    teams = f"{match_data.get('team_a')} vs {match_data.get('team_b')}"
+    phase = "IN-PLAY" # Under live-only coverage model
 
-    # Step 2: Phase lock check
+    # Step 3: Phase lock check
     if has_phase_been_posted(db, sport, match_id, phase, room_id):
         print(f"🔒 Phase lock active: Already posted [{phase}] for match [{match_id}] in target [{target}]. Skipping.")
         return
 
-    # Step 3: Cooldown check
+    # Step 4: Cooldown check
     if was_recently_posted(db, room_id=room_id, sport=sport):
         print(f"⏳ Cooldown active: A post was made less than {COOLDOWN_MINUTES} mins ago in target [{target}]. Skipping.")
         return
 
-    # Step 4: Generate questions
-    existing = get_existing_questions(db, room_id=room_id, sport=sport)
-    existing_str = "\n".join([f"- {q}" for q in existing]) if existing else "None"
-    polls = generate_questions(match, sport, existing_str, pre_match_count=existing_count)
+    # Step 5: Fetch 4-Pillar Data
+    rivalries = []
+    stats = []
+    history = []
+    form = {}
 
-    if not polls:
-        print(f"⚠️ No questions generated for {sport} [{phase}] in target [{target}]. Staying silent.")
-        return
+    try:
+        rival_docs = db.collection("matches").document(match_id).collection("rivalries").stream()
+        rivalries = [r.to_dict() for r in rival_docs]
+        
+        stat_docs = db.collection("matches").document(match_id).collection("stats").stream()
+        stats = [s.to_dict() for s in stat_docs]
+        
+        hist_docs = db.collection("matches").document(match_id).collection("matchup_history").stream()
+        history = [h.to_dict() for h in hist_docs]
+        
+        form_doc = db.collection("matches").document(match_id).collection("tournament_form").document("latest").get()
+        if form_doc.exists:
+            form = form_doc.to_dict()
+    except Exception as e:
+        print(f"⚠️ Failed to load 4-pillar data: {e}. Fallback to live score questions.")
 
-    # Step 5: Publish
-    publish_questions(db, polls, sport, room_id=room_id)
+    # Create search instructions incorporating live scores
+    live_context = ""
+    try:
+        now_ist = datetime.now(IST).strftime("%I:%M %p IST")
+        search_query = f"live score current details {teams} {sport} match status today {now_ist}"
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=search_query,
+            config=types.GenerateContentConfig(
+                tools=[types.Tool(google_search=types.GoogleSearch())],
+                temperature=0.1
+            )
+        )
+        live_context = response.text.strip()
+    except Exception as e:
+        print(f"⚠️ Live score search failed: {e}")
 
-    # Step 6: Stamp phase lock
-    stamp_phase_lock(db, sport, match_id, phase, room_id)
-    print(f"✅ Dolly done for sport={sport}, phase={phase}, target={target}")
+    # Build Prompt
+    prompt = f"""
+    You are Dolly, a passionate and highly knowledgeable sports analyst.
+    Generate exactly 1 prediction AND 1 debate for the live match: {teams}.
+    
+    Live Score Context:
+    {live_context}
+    
+    Rivalries Data:
+    {json.dumps(rivalries)}
+    
+    Historical Stats Data:
+    {json.dumps(stats)}
+    
+    Matchup History:
+    {json.dumps(history)}
+    
+    Tournament Form:
+    {json.dumps(form)}
+    
+    YOUR QUESTION STYLE:
+    - Short and punchy. Maximum 2 sentences. 1 sentence is even better.
+    - Confident, direct, articulate, and opinionated — like a professional analyst.
+    - No Gen-Z slang, no emojis, no exclamation marks.
+    - Options (sideA, sideB) must be 1 to 4 words only.
+    - Frame your questions using your boss's 4 core pillars:
+      1. Athletes as characters (frame key player's pressure or expectations).
+      2. Rivalries as story arcs (midfield battles, attacker vs keeper).
+      3. Stats as storytelling tools (uses historical values, curses, or records).
+      4. Moments as shareable cultural content (the live action, penalty tension).
+      
+    Return ONLY a valid JSON list of objects:
+    [
+      {{
+        "type": "prediction" or "debate",
+        "text": "Short question?",
+        "sideA": "Option A",
+        "sideB": "Option B"
+      }}
+    ]
+    """
+
+    try:
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                temperature=0.3
+            )
+        )
+        raw = response.text.strip()
+        start = raw.find("[")
+        end = raw.rfind("]") + 1
+        if start == -1 or end == 0:
+            print("⚠️ Gemini returned no JSON for question generation.")
+            return
+        polls = json.loads(raw[start:end])
+        
+        # Step 6: Publish
+        publish_questions(db, polls, sport, room_id=room_id)
+        stamp_phase_lock(db, sport, match_id, phase, room_id)
+        print(f"✅ Dolly done for sport={sport}, phase={phase}, target={target}")
+    except Exception as e:
+        print(f"❌ Question generation failure: {e}")
+
 
 
 # ── Automated Full Run ────────────────────────────────────────────────────────
@@ -457,7 +570,7 @@ def find_infinity_room_id(db) -> str | None:
 
 def dolly_auto_run_all_rooms():
     """
-    Master runner — runs automatically every 25 minutes via APScheduler on Render.
+    Master runner — runs automatically every 15 minutes via APScheduler on Render.
 
     Logic:
     - SF360 Infinity Room (common room): always gets BOTH cricket and football posts.
@@ -465,9 +578,9 @@ def dolly_auto_run_all_rooms():
     - Football rooms: get football posts only (based on most upcoming football match).
     - Global feed: gets both cricket and football posts.
     - No hardcoding of match details — Gemini + Google Search detects live/upcoming matches.
-    - Anti-spam: 20-min cooldown between posts in any room.
+    - Anti-spam: 15-min cooldown between posts in any room.
     - Anti-hallucination: silent if no match found.
-    - Pre-match: 2 rounds max. In-play: every 25 mins. Post-match: 2 rounds max.
+    - Pre-match: disabled. In-play: every 15 mins. Post-match: 1 post max.
     """
     db = init_firebase()
     posted_room_ids = set()  # Prevents double-posting to same room
