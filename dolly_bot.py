@@ -503,14 +503,37 @@ def run_dolly_for_sport(sport: str, room_id=None):
     YOUR QUESTION STYLE:
     - Short and punchy. Maximum 2 sentences. 1 sentence is even better.
     - Confident, direct, articulate, and opinionated — like a professional analyst.
+    - NO generic, lazy, or simple "who wins" or "is team X good" questions.
     - No Gen-Z slang, no emojis, no exclamation marks.
     - Options (sideA, sideB) must be 1 to 4 words only.
-    - Frame your questions using your boss's 4 core pillars:
-      1. Athletes as characters (frame key player's pressure or expectations).
-      2. Rivalries as story arcs (midfield battles, attacker vs keeper).
-      3. Stats as storytelling tools (uses historical values, curses, or records).
-      4. Moments as shareable cultural content (the live action, penalty tension).
+    - Frame your questions using your boss's Gen Z Sports Fan Discussion Category Matrix:
       
+      DISCUSSION CATEGORIES TO WEAVE IN (BASED ON PHASES):
+      1. PERFORMANCE (Tactical debates, athlete performance arcs, rivalries, stats & data analytics).
+         * During Match: Focus on tactical decisions ("Who should bowl next?", "X hasn't touched the ball in 20 mins", "expected goals curse").
+         * Between Matches / Post-Match: Focus on strategic decisions ("Wrong XI selected?", "Did the coach have any tactical idea?", "Slump or blip?").
+      2. EMOTION & CULTURE (Memes & humor, controversies, red cards, VAR/DRS robbing, nostalgia, match build-up).
+         * During Match: Focus on controversial moments ("VAR/DRS robbery", "He dived — clear card", "Stadium energy/WC atmosphere").
+         * Between/Post-Match: Focus on post-match reactions ("Coach press-conference unfiltered drama", "Line-up reaction threads").
+      3. ATHLETE AS PERSON (Personal life/identity, mental health/wellbeing, airport fit, fashion & lifestyle).
+         * Examples: Focus on mental fatigue and pressure ("Visible player distress / community worry", "Form linked to fatigue / coach rotation", "collab drops").
+      4. FAN PARTICIPATION (Fantasy sports, creator edit clips, transfer speculation, mini-league standings).
+         * Examples: Focus on fan investment and valuation ("0 points gameweek disaster", "transfer value kill", "target linked to team").
+
+    CRITICAL QUALITY CHECK:
+    - The question must focus on a specific tactical battle, statistical milestone, mental/physical pressure point, or controversial decision.
+    - Avoid dry or academic language, but NEVER write informal, dumb, or low-effort questions. It must sound like an expert analyst highlighting a key narrative thread.
+
+    ILLUSTRATIVE EXAMPLES TO PRIME YOUR OUTPUT (MATCH THESE STYLES):
+    * Tactical Performance: "Virat's strike rate is awful — should he retire to the pavilion or accelerate?"
+    * Team Controversy: "That was a blatant cheat — does that challenge deserve an immediate red card?"
+    * DRS / VAR Drama: "That was never out — is DRS killing the spirit of this game?"
+    * Player Performance Arc: "Slump or blip? The numbers say he's carrying the whole team this season."
+    * Player Mental Health / Pressure: "The pressure got to him in the post-match presser — is coach rotation needed?"
+    * Off-Pitch Lifestyle: "Airport fit goes viral — does X's off-pitch style match his on-pitch form?"
+    * Social Causes / Action: "X took a knee today — will this spark team solidarity or fan division?"
+    * Fan Creator / Transfer: "That performance will kill his transfer value — should we sell him this window?"
+
     Return ONLY a valid JSON list of objects:
     [
       {{
