@@ -514,7 +514,7 @@ def run_dolly_for_sport(sport: str, room_id=None):
     live_context = ""
     try:
         now_ist = datetime.now(IST).strftime("%I:%M %p IST")
-        search_query = f"live score current details {teams} {sport} match status today {now_ist}"
+        search_query = f"India vs England T20 live scorecard ball by ball score today {now_ist}"
         response = client.models.generate_content(
             model="gemini-2.5-flash",
             contents=search_query,
@@ -532,7 +532,7 @@ def run_dolly_for_sport(sport: str, room_id=None):
     You are Dolly, a passionate and highly knowledgeable sports analyst.
     Generate exactly 1 prediction AND 1 debate for the live match: {teams}.
     
-    Live Score Context:
+    Live Score Context (from live Google Search):
     {live_context}
     
     Rivalries Data:
@@ -551,6 +551,7 @@ def run_dolly_for_sport(sport: str, room_id=None):
     - Short and punchy. Maximum 2 sentences. 1 sentence is even better.
     - Confident, direct, articulate, and opinionated — like a professional analyst.
     - NO generic, lazy, or simple "who wins" or "is team X good" questions.
+    - MUST ask about the CURRENT live status (e.g. current score, wickets, which batsmen are currently at the crease, or who is currently bowling).
     - No Gen-Z slang, no emojis, no exclamation marks.
     - Options (sideA, sideB) must be 1 to 4 words only.
     - Frame your questions using your boss's Gen Z Sports Fan Discussion Category Matrix:
