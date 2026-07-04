@@ -407,8 +407,9 @@ def run_dolly_for_sport(sport: str, room_id=None):
                     match_data = match_doc.to_dict()
                     print(f"🔗 Bound to focus match: {match_data.get('team_a')} vs {match_data.get('team_b')} via room matchId [{match_id}]")
 
-    # Step 2: Fallback to detect live match from matches table
+    # Step 2: Fallback to detect live or upcoming match from matches table
     if not match_data:
+        # Check live matches first
         matches_ref = db.collection("matches")\
             .where("sport", "==", sport)\
             .where("status", "==", "live")\
@@ -419,14 +420,60 @@ def run_dolly_for_sport(sport: str, room_id=None):
             print(f"🎯 Detected active live match from table: {match_data.get('team_a')} vs {match_data.get('team_b')} [{match_id}]")
             break
 
+    # If no live match, check for upcoming matches that should be live now
+    if not match_data:
+        now_ms = int(time.time() * 1000)
+        upcoming_ref = db.collection("matches")\
+            .where("sport", "==", sport)\
+            .where("status", "==", "upcoming")\
+            .stream()
+        for doc in upcoming_ref:
+            m_data = doc.to_dict()
+            kickoff = m_data.get("kickoff_time", 0)
+            # If current time is past kickoff (or within 5 minutes before kickoff for build-up)
+            if kickoff > 0 and now_ms >= (kickoff - 5 * 60 * 1000):
+                match_id = doc.id
+                match_data = m_data
+                # Update status to live in Firestore automatically
+                db.collection("matches").document(match_id).update({"status": "live", "updated_at": now_ms})
+                match_data["status"] = "live"
+                print(f"⏰ Kickoff time reached! Auto-transitioned match [{match_id}] to LIVE: {match_data.get('team_a')} vs {match_data.get('team_b')}")
+                break
+
+    if room_id and not match_data:
+        # If we have a linked room but the match was upcoming, check if its kickoff time has arrived
+        room_doc = db.collection("roarRooms").document(room_id).get()
+        if room_doc.exists:
+            match_id = room_doc.to_dict().get("matchId")
+            if match_id:
+                match_doc = db.collection("matches").document(match_id).get()
+                if match_doc.exists:
+                    m_data = match_doc.to_dict()
+                    if m_data.get("status") == "upcoming":
+                        kickoff = m_data.get("kickoff_time", 0)
+                        now_ms = int(time.time() * 1000)
+                        if kickoff > 0 and now_ms >= (kickoff - 5 * 60 * 1000):
+                            match_data = m_data
+                            db.collection("matches").document(match_id).update({"status": "live", "updated_at": now_ms})
+                            match_data["status"] = "live"
+                            print(f"⏰ Linked room kickoff reached! Auto-transitioned match [{match_id}] to LIVE: {match_data.get('team_a')} vs {match_data.get('team_b')}")
+
     if not match_data:
         print(f"⏭️ No active live match scheduled in database for {sport}. Dolly will stay silent.")
         return
 
     # Verify status
     if match_data.get("status") != "live":
-        print(f"🔒 Match [{match_id}] is {match_data.get('status')}. Dolly is gated to live matches only. Skipping.")
-        return
+        # Check if kickoff time for this specific match has arrived
+        kickoff = match_data.get("kickoff_time", 0)
+        now_ms = int(time.time() * 1000)
+        if match_data.get("status") == "upcoming" and kickoff > 0 and now_ms >= (kickoff - 5 * 60 * 1000):
+            db.collection("matches").document(match_id).update({"status": "live", "updated_at": now_ms})
+            match_data["status"] = "live"
+            print(f"⏰ Kickoff reached for linked match [{match_id}]! Auto-transitioned to LIVE.")
+        else:
+            print(f"🔒 Match [{match_id}] is {match_data.get('status')}. Dolly is gated to live matches only. Skipping.")
+            return
 
     teams = f"{match_data.get('team_a')} vs {match_data.get('team_b')}"
     phase = "IN-PLAY" # Under live-only coverage model
