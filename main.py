@@ -51,8 +51,11 @@ def test_generation():
         "keyPlayers": "Suryakumar Yadav, Hardik Pandya, Jofra Archer, Jos Buttler",
         "format": "T20"
     }
-    polls = generate_questions(mock_match, "cricket", "")
-    return {"status": "success", "generated_questions": polls}
+    try:
+        polls = generate_questions(mock_match, "cricket", "")
+        return {"status": "success", "generated_questions": polls}
+    except Exception as e:
+        return {"status": "error", "error_message": str(e)}
 
 @app.post("/run-research")
 def run_research(match_id: str, team_a: str, team_b: str, sport: str, competition: str, background_tasks: BackgroundTasks):
