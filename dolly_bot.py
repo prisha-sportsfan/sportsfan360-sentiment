@@ -552,6 +552,7 @@ def run_dolly_for_sport(sport: str, room_id=None):
     - Confident, direct, articulate, and opinionated — like a professional analyst.
     - NO generic, lazy, or simple "who wins" or "is team X good" questions.
     - MUST ask about the CURRENT live status (e.g. current score, wickets, which batsmen are currently at the crease, or who is currently bowling).
+    - MUST specifically reference at least one active player by name (e.g. "Will Suryakumar Yadav..." or "Can Archer's cutters...") to make the question highly specific and non-generic.
     - No Gen-Z slang, no emojis, no exclamation marks.
     - Options (sideA, sideB) must be 1 to 4 words only.
     - Frame your questions using your boss's Gen Z Sports Fan Discussion Category Matrix:
@@ -569,8 +570,8 @@ def run_dolly_for_sport(sport: str, room_id=None):
          * Examples: Focus on fan investment and valuation ("0 points gameweek disaster", "transfer value kill", "target linked to team").
 
     CRITICAL QUALITY CHECK:
-    - The question must focus on a specific tactical battle, statistical milestone, mental/physical pressure point, or controversial decision.
-    - Avoid dry or academic language, but NEVER write informal, dumb, or low-effort questions. It must sound like an expert analyst highlighting a key narrative thread.
+    - You must select one specific category from the matrix above (e.g., DRS controversy, performance slumps, mental pressure, or transfer value) and write your prediction/debate about it.
+    - DO NOT write generic questions like "Who will win?" or "Will team X score Y runs?". Focus on the narrative, the player's character, or the tactical friction.
 
     ILLUSTRATIVE EXAMPLES TO PRIME YOUR OUTPUT (MATCH THESE STYLES):
     * Tactical Performance: "Virat's strike rate is awful — should he retire to the pavilion or accelerate?"
@@ -581,7 +582,6 @@ def run_dolly_for_sport(sport: str, room_id=None):
     * Off-Pitch Lifestyle: "Airport fit goes viral — does X's off-pitch style match his on-pitch form?"
     * Social Causes / Action: "X took a knee today — will this spark team solidarity or fan division?"
     * Fan Creator / Transfer: "That performance will kill his transfer value — should we sell him this window?"
-
     Return ONLY a valid JSON list of objects:
     [
       {{
