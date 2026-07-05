@@ -38,6 +38,22 @@ def run_dolly(background_tasks: BackgroundTasks):
     background_tasks.add_task(dolly_auto_run_all_rooms)
     return {"status": "triggered", "message": "Dolly full run started in background (cricket + football)."}
 
+@app.get("/test-generation")
+def test_generation():
+    """Diagnostic endpoint to run a mock Dolly generation and see the questions instantly."""
+    from dolly_bot import generate_questions
+    mock_match = {
+        "teams": "India vs England",
+        "tournament": "T20I Series 2026",
+        "venue": "Manchester",
+        "phase": "IN-PLAY",
+        "liveScore": "142/4 (16.2 overs) - India batting",
+        "keyPlayers": "Suryakumar Yadav, Hardik Pandya, Jofra Archer, Jos Buttler",
+        "format": "T20"
+    }
+    polls = generate_questions(mock_match, "cricket", "")
+    return {"status": "success", "generated_questions": polls}
+
 @app.post("/run-research")
 def run_research(match_id: str, team_a: str, team_b: str, sport: str, competition: str, background_tasks: BackgroundTasks):
     """Triggers automated pre-match LLM research grounding for a specific scheduled match."""
