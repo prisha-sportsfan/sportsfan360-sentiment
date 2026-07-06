@@ -1,6 +1,4 @@
-import os
-import threading
-from fastapi import FastAPI, BackgroundTasks
+from fastapi import FastAPI, BackgroundTasks, Query
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from apscheduler.schedulers.blocking import BlockingScheduler
@@ -58,8 +56,19 @@ def test_generation():
         return {"status": "error", "error_message": str(e)}
 
 @app.post("/run-research")
-def run_research(match_id: str, team_a: str, team_b: str, sport: str, competition: str, background_tasks: BackgroundTasks):
+def run_research(
+    match_id: str = Query(...), 
+    team_a: str = Query(...), 
+    team_b: str = Query(...), 
+    sport: str = Query(...), 
+    competition: str = Query(...), 
+    background_tasks: BackgroundTasks = None
+):
     """Triggers automated pre-match LLM research grounding for a specific scheduled match."""
+    # Ensure background_tasks is initialized
+    if not background_tasks:
+        from fastapi import BackgroundTasks as FastAPITasks
+        background_tasks = FastAPITasks()
     background_tasks.add_task(run_match_research, match_id, team_a, team_b, sport, competition)
     return {"status": "triggered", "message": f"Pre-match research pipeline started for match [{match_id}]."}
 

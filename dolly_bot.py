@@ -76,12 +76,14 @@ def stamp_phase_lock(db, sport: str, match_id: str, phase: str, room_id: str = N
     })
 
 def was_recently_posted(db, room_id=None, sport="cricket", cooldown_minutes=COOLDOWN_MINUTES) -> bool:
-    """Returns True if Dolly posted in this feed/room within the cooldown window."""
+    """Returns True if Dolly posted in this feed/room for this specific sport within the cooldown window."""
     cutoff_ms = int((time.time() - cooldown_minutes * 60) * 1000)
     try:
         if room_id:
+            # Check only messages of the target sport to allow dual-sport rooms
             msgs = db.collection("roarRooms").document(room_id).collection("messages") \
-                .where("authorUid", "==", "dolly-dolphin-bot").stream()
+                .where("authorUid", "==", "dolly-dolphin-bot") \
+                .where("sport", "==", sport).stream()
             for msg in msgs:
                 if msg.to_dict().get("createdAt", 0) > cutoff_ms:
                     return True
