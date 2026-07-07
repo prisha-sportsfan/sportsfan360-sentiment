@@ -2,6 +2,7 @@ from fastapi import FastAPI, BackgroundTasks, Query
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import threading
+import os
 from apscheduler.schedulers.blocking import BlockingScheduler
 from sentiment_engine import run_sentiment_engine
 from firebase_store import save_report, get_latest_report, list_reports, get_report
