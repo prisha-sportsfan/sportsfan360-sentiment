@@ -42,6 +42,8 @@ def has_phase_been_posted(db, sport: str, match_id: str, phase: str, room_id: st
     """
     if phase == "PRE-MATCH":
         return True  # Stop/skip pre-match posting completely
+    if phase == "IN-PLAY":
+        return False # No phase locks for in-play (cooldown handles spacing)
         
     key = get_phase_lock_key(sport, match_id, phase, room_id)
     doc = db.collection("dollyPhaseLocks").document(key).get()
@@ -53,10 +55,7 @@ def has_phase_been_posted(db, sport: str, match_id: str, phase: str, room_id: st
     
     elapsed_minutes = (time.time() * 1000 - posted_at) / (1000 * 60)
     
-    if phase == "IN-PLAY":
-        # Block if it has been less than 15 minutes since last in-play post
-        return elapsed_minutes < 15
-    elif phase == "POST-MATCH":
+    if phase == "POST-MATCH":
         # Block permanently (max 1 post) for post-match
         return post_count >= 1
     return False
