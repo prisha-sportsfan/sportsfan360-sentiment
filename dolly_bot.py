@@ -611,6 +611,39 @@ def run_dolly_for_sport(sport: str, room_id=None):
             return
         polls = json.loads(raw[start:end])
         
+        # ── TODAY'S CUSTOM DEBATES (TEMPORARY FOR TONIGHT'S RUN) ──
+        if sport == "cricket" and room_id:
+            custom_debates = [
+                {
+                    "type": "debate",
+                    "text": "Gambhir's gameplan for the white ball series in Ireland & England was just fine. It was a case of poor execution.",
+                    "sideA": "Support",
+                    "sideB": "Counter"
+                },
+                {
+                    "type": "debate",
+                    "text": "Team selection by India's think-tank is chiefly influenced by T20 performances. Is India missing an experienced hand or two to deal with swing & seam conditions in England?",
+                    "sideA": "Needs Experience",
+                    "sideB": "Back the Youth"
+                },
+                {
+                    "type": "debate",
+                    "text": "Caption this: Baz giving tips to GG",
+                    "sideA": "Tactical Advice",
+                    "sideB": "Just Banter"
+                }
+            ]
+            # Fetch already posted questions to avoid duplicates
+            posted_texts = get_existing_questions(db, room_id=room_id, sport=sport)
+            
+            # Find the first custom debate that hasn't been posted yet
+            for cd in custom_debates:
+                if cd["text"] not in posted_texts:
+                    polls.append(cd)
+                    print(f"📌 Injected custom boss debate: \"{cd['text']}\"")
+                    break # Post exactly one custom debate per 20-min cycle alongside the normal poll
+        # ──────────────────────────────────────────────────────────
+
         # Step 6: Publish
         publish_questions(db, polls, sport, room_id=room_id)
         stamp_phase_lock(db, sport, match_id, phase, room_id)
