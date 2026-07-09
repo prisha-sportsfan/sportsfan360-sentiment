@@ -5,6 +5,7 @@ from datetime import datetime, timezone, timedelta
 from google import genai
 from google.genai import types
 from firebase_store import init_firebase
+from google.cloud.firestore_v1 import Increment
 
 # ── Gemini Client ─────────────────────────────────────────────────────────────
 # Uses GEMINI_API_KEY if available (AI Studio) to avoid authentication issues.
@@ -23,6 +24,15 @@ else:
 
 IST = timezone(timedelta(hours=5, minutes=30))
 COOLDOWN_MINUTES = 15  # Minimum gap between posts in the same room/feed (matches 15-min schedule)
+
+ROOM_COUNT_FIELD_BY_TYPE = {
+    "post": "postCount",
+    "chat": "postCount",
+    "debate": "debateCount",
+    "prediction": "predictionCount",
+    "trivia": "triviaCount",
+    "battle": "battleCount",
+}
 
 # ── Phase Lock Helpers ────────────────────────────────────────────────────────
 
@@ -353,6 +363,12 @@ def publish_questions(db, polls: list, sport: str, room_id=None):
                 "createdAt": now_ms,
                 "updatedAt": now_ms
             })
+            room_ref = db.collection("roarRooms").document(room_id)
+            count_field = ROOM_COUNT_FIELD_BY_TYPE.get(poll.get("type", "prediction"))
+            update_payload = {"fanCount": Increment(1)}
+            if count_field:
+                update_payload[count_field] = Increment(1)
+            room_ref.update(update_payload)
             print(f"🐬 Room [{room_id}]: [{poll.get('type')}] \"{text}\"")
         else:
             post_ref = db.collection("roarPosts").document()
