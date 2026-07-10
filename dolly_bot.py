@@ -378,7 +378,6 @@ def publish_questions(db, polls: list, sport: str, room_id=None):
             except Exception as e:
                 print(f"❌ Failed to publish+count Dolly message in room [{room_id}]: {e}")
         else:
-        else:
             post_ref = db.collection("roarPosts").document()
             post_ref.set({
                 "postId": post_ref.id,
